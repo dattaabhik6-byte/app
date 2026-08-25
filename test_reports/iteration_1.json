@@ -1,0 +1,21 @@
+{
+  "summary": "Frontend Live Work testing completed: core start, reverse timer, pause disposition, priority transfer, completion metrics, refresh persistence, disabled unassigned actions, and shell navigation passed. Individual OLI search exposed duplicate seeded IDs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Individual OLI search and ID-keyed actions", "issue": "The demo seed contains duplicate OLI ID OLI17495576578710 (first record and final GST record). Searching an individual OLI ID returns 2 rows instead of 1; React rows also share the same key and start/priority state updates compare by id, so actions can affect both records or the wrong record.", "affected_selectors": ["[data-testid=live-work-search-input]", "[data-testid^=live-work-row-]", "[data-testid^=start-]", "[data-testid^=transfer-]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": ["Make all 17 seeded OLI IDs unique, then retest individual search and transfer/start behavior."],
+  "critical_code_review_comments": ["seed assigns the same OLI ID to i=0 and i=16; all state mutations use id equality and table keys use id, making duplicate IDs a correctness issue beyond display."],
+  "updated_files": ["/app/test_reports/iteration_1.json"],
+  "success_rate": {"backend": "N/A", "frontend": "90%"},
+  "seed_data_creation": "Used existing browser demo seed only; cleared localStorage before the primary flow run.",
+  "retest_needed": true,
+  "should_call_test_agent_after_fix": true,
+  "context_for_next_testing_agent": "Core Live Work flows passed on clean state. Retest after unique OLI seed IDs are corrected; timer-expiry branches were not waited for because demo timers are 20-30 minutes.",
+  "rca of the issue": "In App.js seed, i=0 generates OLI17495576578710 while the i=16 special case also hardcodes OLI17495576578710. The UI filters by ID, renders key by ID, and updates items with x.id===item.id, so duplicates are not safely addressable."
+}
