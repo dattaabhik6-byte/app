@@ -27,6 +27,7 @@ Enhance the existing Online Legal India employee panel with a production-style L
 - Added Priority queue, immediate count updates, transfer-to-Live-Work recovery, fresh timer attempts, metrics, activity history, and browser persistence.
 - Added dashboard summary metrics for target, completion, remaining work, Priority, performance, buffer usage, and recovery.
 - Added Trademark completion transfer selector with `TMA Draft Uploaded`, persisted as the filing next stage and audit event.
+- Added the TMA Draft Uploaded detail form: draft file metadata, remark, brand name, class, type, follow-up date/time, and disposition with required-field gating.
 
 ## Prioritized backlog
 - **P0:** Manager/TL configuration screens and role-aware permissions.
