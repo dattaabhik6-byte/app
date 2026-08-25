@@ -26,6 +26,7 @@ Enhance the existing Online Legal India employee panel with a production-style L
 - Added Pause and buffer-expiry disposition modals with dependent sub-dispositions and dynamic evidence validation.
 - Added Priority queue, immediate count updates, transfer-to-Live-Work recovery, fresh timer attempts, metrics, activity history, and browser persistence.
 - Added dashboard summary metrics for target, completion, remaining work, Priority, performance, buffer usage, and recovery.
+- Added Trademark completion transfer selector with `TMA Draft Uploaded`, persisted as the filing next stage and audit event.
 
 ## Prioritized backlog
 - **P0:** Manager/TL configuration screens and role-aware permissions.
