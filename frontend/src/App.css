@@ -35,6 +35,19 @@
 .detail-grid>div{display:flex;flex-direction:column;gap:3px}
 .detail-grid span{font-size:11px;font-weight:800;color:#7d8491;letter-spacing:.06em;text-transform:uppercase}
 .detail-grid strong{color:#2f3542;font-size:14px;font-weight:700}
+.completed-card{position:relative}
+.completed-card.clickable{cursor:pointer;transition:transform .12s,box-shadow .15s;border-color:#c7d0f8}
+.completed-card.clickable:hover{transform:translateY(-2px);box-shadow:0 6px 16px #203e8125;border-color:#3049d2}
+.completed-card .metric-hint{position:absolute;top:14px;right:14px;font-size:10px;font-weight:800;color:#3049d2;background:#e9edff;padding:3px 7px;border-radius:11px;font-style:normal;display:inline-flex;align-items:center;gap:2px;letter-spacing:.04em}
+.completed-modal{width:min(1050px,95vw);max-height:88vh;padding:26px 28px;display:flex;flex-direction:column}
+.completed-modal .modal-close{position:absolute;right:15px;top:15px;background:none;color:#758090;border:0}
+.completed-modal h2{margin:4px 0 3px}
+.completed-modal>.muted{margin-bottom:18px}
+.completed-table-wrap{overflow:auto;flex:1;border:1px solid var(--line)}
+.completed-table-wrap table{min-width:820px}
+.completed-table-wrap th{background:#f7f9ff;position:sticky;top:0;z-index:1}
+.chev{color:#a1abbb;transition:transform .2s}
+.chev-open{color:#3049d2;transform:rotate(180deg);transition:transform .2s}
 
 @media(max-width:950px){.sidebar{width:225px;padding:15px}.topbar{padding:0 16px}.top-icons{display:none}.page{padding:24px 16px}.metrics{grid-template-columns:repeat(3,1fr)}.active-work{grid-template-columns:1fr 1fr}.active-actions{grid-column:1/-1;justify-content:flex-start}.search-box{min-width:280px}.section-head{align-items:flex-start;flex-direction:column}.dashboard-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.sidebar{width:64px;padding:15px 8px}.brand strong,.brand sup,.brand small,.side-search,.side-link span,.badge{display:none}.brand{justify-content:center}.side-link{justify-content:center;padding:12px 0}.topbar{height:64px}.global-search{width:100%}.global-search select{max-width:115px}.page-title{display:block}.employee-chip,.priority-total{margin-top:15px;width:max-content}.metrics{grid-template-columns:repeat(2,1fr)}.active-work{grid-template-columns:1fr}.timer-block{border:0;text-align:left;padding:10px 0}.search-box{min-width:100%;width:100%}.result-banner{flex-wrap:wrap}.result-banner small{margin-left:0}}

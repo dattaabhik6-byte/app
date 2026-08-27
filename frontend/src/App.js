@@ -88,7 +88,6 @@ function Shell({ state, children }) {
     { label: "Fresh Unassign", cyan: true },
     { label: "TMR Premium Fresh", cyan: true },
     { label: "Yet to Work", arrow: true, path: "/employee/trademark-registration/yet-to-work", testid: "tmr-yet-to-work" },
-    { label: "Complete", arrow: true, path: "/employee/trademark-registration/complete", testid: "tmr-complete", badge: state.completedFilings.length },
     { label: "Govt Fee Paid", arrow: true },
     { label: "TMA Draft Approved", arrow: true },
     { label: "TMA Draft Rejected", arrow: true },
@@ -148,16 +147,55 @@ function Shell({ state, children }) {
 }
 
 function Metrics({ state }) {
+  const [showCompleted, setShowCompleted] = useState(false);
   const pct = Math.round((state.normalCompleted / state.target) * 100);
   const performance = state.normalCompleted >= state.target + 5 ? "EXCELLENT" : state.normalCompleted >= state.target + 3 ? "GREAT" : state.normalCompleted >= state.target + 1 ? "VERY GOOD" : state.normalCompleted >= state.target ? "GOOD" : "POOR";
-  return <div className="metrics">
-    <div><span>TARGET</span><strong data-testid="target-count">{state.target}</strong></div>
-    <div><span>COMPLETED</span><strong data-testid="completed-count">{state.normalCompleted}</strong></div>
-    <div><span>REMAINING</span><strong data-testid="remaining-count">{Math.max(0, state.target - state.normalCompleted)}</strong></div>
-    <div><span>PROGRESS</span><strong data-testid="completion-percent">{pct}%</strong></div>
-    <div><span>PRIORITY</span><strong data-testid="priority-count">{state.priority.length}</strong></div>
-    <div><span>PERFORMANCE</span><strong className="performance" data-testid="performance-label">{performance}</strong></div>
-  </div>;
+  const hasCompleted = state.completedFilings && state.completedFilings.length > 0;
+  return <>
+    <div className="metrics">
+      <div><span>TARGET</span><strong data-testid="target-count">{state.target}</strong></div>
+      <div className={`completed-card ${hasCompleted ? "clickable" : ""}`} onClick={hasCompleted ? () => setShowCompleted(true) : undefined} data-testid="completed-metric-card"><span>COMPLETED</span><strong data-testid="completed-count">{state.normalCompleted}</strong>{hasCompleted && <em className="metric-hint" data-testid="completed-view-hint">View <ChevronDown size={11}/></em>}</div>
+      <div><span>REMAINING</span><strong data-testid="remaining-count">{Math.max(0, state.target - state.normalCompleted)}</strong></div>
+      <div><span>PROGRESS</span><strong data-testid="completion-percent">{pct}%</strong></div>
+      <div><span>PRIORITY</span><strong data-testid="priority-count">{state.priority.length}</strong></div>
+      <div><span>PERFORMANCE</span><strong className="performance" data-testid="performance-label">{performance}</strong></div>
+    </div>
+    {showCompleted && <CompletedFilingsModal rows={state.completedFilings} onClose={()=>setShowCompleted(false)}/>}
+  </>;
+}
+
+function CompletedFilingsModal({ rows, onClose }) {
+  const [openId, setOpenId] = useState(null);
+  return <div className="modal-backdrop" onClick={onClose}><div className="modal completed-modal" data-testid="completed-filings-modal" onClick={e=>e.stopPropagation()}>
+    <button className="modal-close" onClick={onClose} data-testid="completed-modal-close"><X size={18}/></button>
+    <div className="eyebrow">COMPLETED FILINGS</div>
+    <h2>{rows.length} Completed {rows.length === 1 ? "Filing" : "Filings"}</h2>
+    <p className="muted">Click any row to expand and see full details and the exact time you took.</p>
+    <div className="completed-table-wrap"><table><thead><tr><th>OLI ID</th><th>CUSTOMER</th><th>BRAND</th><th>CLASS</th><th>TYPE</th><th>COMPLETED AT</th><th>TIME TAKEN</th><th></th></tr></thead><tbody>{rows.map((x, i) => <Fragment key={`${x.id}-${i}`}>
+      <tr data-testid={`completed-modal-row-${x.id}`} onClick={()=>setOpenId(openId === x.id ? null : x.id)} className="clickable-row">
+        <td className="oli-id">{x.id}</td>
+        <td>{x.name}</td>
+        <td>{x.draftDetails.brandName}</td>
+        <td>{x.draftDetails.className}</td>
+        <td>{x.draftDetails.type}</td>
+        <td>{x.completedAt}</td>
+        <td className={x.withinTime ? "green-time" : "red-time"} data-testid={`completed-modal-time-${x.id}`}><strong>{fmt(x.completionSeconds || 0)}</strong>{x.bufferUsed && <div><small>(Buffer)</small></div>}</td>
+        <td><ChevronDown size={14} className={openId === x.id ? "chev-open" : "chev"}/></td>
+      </tr>
+      {openId === x.id && <tr className="detail-row" data-testid={`completed-modal-detail-${x.id}`}><td colSpan="8"><div className="detail-grid">
+        <div><span>Master ID</span><strong>{x.masterId}</strong></div>
+        <div><span>State</span><strong>{x.state}</strong></div>
+        <div><span>Amount</span><strong>₹{x.amount}</strong></div>
+        <div><span>Package</span><strong>{x.package}</strong></div>
+        <div><span>Draft File</span><strong>{x.draftDetails.fileName}</strong></div>
+        <div><span>Remark</span><strong>{x.draftDetails.remark}</strong></div>
+        <div><span>Followup Scheduled</span><strong>{x.draftDetails.followupDate} · {x.draftDetails.followupTime}</strong></div>
+        <div><span>Disposition</span><strong>{x.draftDetails.disposition}</strong></div>
+        <div><span>Completed by</span><strong>{x.agent}</strong></div>
+        <div><span>Buffer Used</span><strong className={x.bufferUsed ? "red-time" : "green-time"}>{x.bufferUsed ? "Yes" : "No"}</strong></div>
+      </div></td></tr>}
+    </Fragment>)}</tbody></table></div>
+  </div></div>;
 }
 
 function DispositionModal({ kind, item, onCancel, onSubmit }) {
@@ -394,46 +432,6 @@ function AllCallSchedule({ state }) {
   </div>;
 }
 
-function CompletedFilings({ state }) {
-  const [openId, setOpenId] = useState(null);
-  const rows = state.completedFilings;
-  return <div className="page">
-    <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / TRADEMARK REGISTRATION / COMPLETE</div><h1 data-testid="complete-page-title">Completed Filings</h1><p>Every filing you finished, with the exact time you took to complete it.</p></div><div className="priority-total"><strong data-testid="complete-page-count">{rows.length}</strong><span>completed</span></div></div>
-    <Metrics state={state}/>
-    <section className="work-section">
-      <div className="section-head"><div><h2>Complete</h2><p className="muted">Click any row to expand and see the full filing detail and time taken.</p></div></div>
-      {rows.length === 0 ? <div className="empty" data-testid="complete-empty"><CheckSquare size={30}/><strong>No completed filings yet</strong><span>Cases you complete in Yet to Work will appear here with the time you took.</span></div> : <div className="table-wrap"><table><thead><tr><th>OLI ID</th><th>CUSTOMER</th><th>BRAND NAME</th><th>CLASS</th><th>TYPE</th><th>COMPLETED AT</th><th>TIME TAKEN</th><th>ACTION</th></tr></thead><tbody>{rows.map((x, i) => <Fragment key={`${x.id}-${i}`}>
-        <tr data-testid={`complete-row-${x.id}`} onClick={() => setOpenId(openId === x.id ? null : x.id)} className="clickable-row">
-          <td className="oli-id">{x.id}</td>
-          <td>{x.name}</td>
-          <td>{x.draftDetails.brandName}</td>
-          <td>{x.draftDetails.className}</td>
-          <td>{x.draftDetails.type}</td>
-          <td>{x.completedAt}</td>
-          <td className={x.withinTime ? "green-time" : "red-time"} data-testid={`complete-time-${x.id}`}><strong>{fmt(x.completionSeconds || 0)}</strong>{x.bufferUsed && <div><small>(Buffer Used)</small></div>}</td>
-          <td><button className="secondary" data-testid={`complete-toggle-${x.id}`}>{openId === x.id ? "Hide" : "View"} Details</button></td>
-        </tr>
-        {openId === x.id && <tr className="detail-row" data-testid={`complete-detail-${x.id}`}>
-          <td colSpan="8">
-            <div className="detail-grid">
-              <div><span>Master ID</span><strong>{x.masterId}</strong></div>
-              <div><span>State</span><strong>{x.state}</strong></div>
-              <div><span>Amount</span><strong>₹{x.amount}</strong></div>
-              <div><span>Package</span><strong>{x.package}</strong></div>
-              <div><span>Draft File</span><strong>{x.draftDetails.fileName}</strong></div>
-              <div><span>Remark</span><strong>{x.draftDetails.remark}</strong></div>
-              <div><span>Followup Scheduled</span><strong>{x.draftDetails.followupDate} · {x.draftDetails.followupTime}</strong></div>
-              <div><span>Disposition</span><strong>{x.draftDetails.disposition}</strong></div>
-              <div><span>Completed by</span><strong>{x.agent}</strong></div>
-              <div><span>Buffer Used</span><strong className={x.bufferUsed ? "red-time" : "green-time"}>{x.bufferUsed ? "Yes" : "No"}</strong></div>
-            </div>
-          </td>
-        </tr>}
-      </Fragment>)}</tbody></table></div>}
-    </section>
-  </div>;
-}
-
 function Dashboard({ state }) {
   return <div className="page dashboard">
     <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / DASHBOARD</div><h1 data-testid="dashboard-title">Today&apos;s Work</h1><p>Good morning, Abhik. Here is your work summary.</p></div></div>
@@ -460,7 +458,6 @@ function App() {
       <Route path="/employee/priority" element={<Priority state={state} setState={setState}/>}/>
       <Route path="/employee/all-call-schedule" element={<AllCallSchedule state={state}/>}/>
       <Route path="/employee/trademark-registration/yet-to-work" element={<TrademarkYetToWork state={state} setState={setState}/>}/>
-      <Route path="/employee/trademark-registration/complete" element={<CompletedFilings state={state}/>}/>
       <Route path="*" element={<Dashboard state={state}/>}/>
     </Routes>
   </Shell></BrowserRouter>;
