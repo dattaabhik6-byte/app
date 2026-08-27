@@ -56,8 +56,8 @@ const buildTmrSeed = () => tmrOliIds.map((id, i) => ({
 }));
 
 const draftBlank = { remark:"", fileName:"", brandName:"", className:"", type:"", followupDate:"", followupTime:"", disposition:"" };
-const initial = { items: buildSeed(), tmrItems: buildTmrSeed(), active: null, priority: [], allCallSchedule: [], audit: [], target: 7, completed: 0, normalCompleted: 0, bufferCompleted: 0, priorityResolved: 0 };
-const STORAGE_KEY = "oli-live-work-v3";
+const initial = { tmrItems: buildTmrSeed(), active: null, priority: [], allCallSchedule: [], audit: [], target: 7, completed: 0, normalCompleted: 0, bufferCompleted: 0, priorityResolved: 0 };
+const STORAGE_KEY = "oli-live-work-v4";
 const load = () => { try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (!s || !s.tmrItems) return initial; return s; } catch { return initial; } };
 const save = (state) => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const fmt = (seconds) => `${String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, "0")}:${String(Math.max(0, seconds) % 60).padStart(2, "0")}`;
@@ -78,7 +78,6 @@ function Shell({ state, children }) {
   ];
   const bottomLinks = [
     ["New Doc Panel", "#", Grid2X2],
-    ["Live Work", "/employee/live-work", Play],
     ["Priority", "/employee/priority", BriefcaseBusiness],
     ["GST Registration", "#", Grid2X2],
     ["GST Modification", "#", Grid2X2],
@@ -103,7 +102,7 @@ function Shell({ state, children }) {
   ];
   const renderLink = ([label, path, Icon]) => path === "#"
     ? <div className={`side-link ${label === "CRM Mailbox" ? "active-old" : ""}`} key={label} data-testid={`sidebar-${label.toLowerCase().replaceAll(" ", "-")}`}><Icon size={16}/><span>{label}</span></div>
-    : <NavLink key={label} to={path} className={({isActive}) => `side-link ${isActive ? "selected" : ""} ${label === "Live Work" ? "live-link" : ""}`} data-testid={`sidebar-${label.toLowerCase().replaceAll(" ", "-")}`}>
+    : <NavLink key={label} to={path} className={({isActive}) => `side-link ${isActive ? "selected" : ""}`} data-testid={`sidebar-${label.toLowerCase().replaceAll(" ", "-")}`}>
         <Icon size={16}/><span>{label}</span>
         {label === "Priority" && <b className="badge" data-testid="priority-sidebar-badge">{state.priority.length}</b>}
         {label === "All Call Schedule" && state.allCallSchedule.length > 0 && <b className="badge acs" data-testid="acs-sidebar-badge">{state.allCallSchedule.length}</b>}
@@ -218,12 +217,13 @@ function TrademarkYetToWork({ state, setState }) {
   const active = state.active && state.active.source === "tmr" ? state.active : null;
   useEffect(()=>{ if (!active) return; const t=setInterval(()=>setTick(Date.now()),1000); return()=>clearInterval(t) },[active]);
   useEffect(()=>{
-    if (!active) return;
+    if (!active || active.frozen) return;
     const elapsed=Math.floor((Date.now()-active.startedAt)/1000);
     const remaining=active.phase === "BUFFER" ? active.bufferSeconds-elapsed : active.workSeconds-elapsed;
     if (remaining <= 0 && active.phase === "WORK") {
       setState(s=>({...s, active:{...s.active, phase:"BUFFER", startedAt:Date.now()}, audit:[...s.audit, `${now()} Buffer Started · ${active.oliId}`]}));
     } else if (remaining <= 0 && active.phase === "BUFFER") {
+      setState(s => s.active && !s.active.frozen ? {...s, active: {...s.active, frozen: true, frozenAt: s.active.startedAt + s.active.bufferSeconds*1000}} : s);
       setModal({ type:"expired", item: state.tmrItems.find(x=>x.id===active.oliId) });
     }
   },[tick, active, setState, state.tmrItems]);
@@ -236,20 +236,30 @@ function TrademarkYetToWork({ state, setState }) {
   }, [state.tmrItems, query]);
 
   const activeItem = active ? state.tmrItems.find(x => x.id === active.oliId) : null;
-  const remaining = active ? (active.phase === "BUFFER" ? active.bufferSeconds - Math.floor((tick-active.startedAt)/1000) : active.workSeconds - Math.floor((tick-active.startedAt)/1000)) : 0;
-  const phaseElapsed = active ? Math.floor((tick - active.startedAt)/1000) : 0;
+  const effectiveNow = active ? (active.frozen ? active.frozenAt : tick) : Date.now();
+  const phaseElapsed = active ? Math.max(0, Math.floor((effectiveNow - active.startedAt)/1000)) : 0;
+  const remaining = active ? (active.phase === "BUFFER" ? active.bufferSeconds - phaseElapsed : active.workSeconds - phaseElapsed) : 0;
   const totalElapsed = active ? (active.phase === "BUFFER" ? active.workSeconds + phaseElapsed : phaseElapsed) : 0;
 
   const begin = (item) => {
     if (!item.assigned || state.active) return;
-    setState(s=>({...s, active:{oliId:item.id, source:"tmr", phase:"WORK", startedAt:Date.now(), workSeconds:item.workMinutes*60, bufferSeconds:item.bufferMinutes*60}, tmrItems:s.tmrItems.map(x=>x.id===item.id?{...x,status:"IN_PROGRESS"}:x), audit:[...s.audit,`${now()} Work Started · ${item.id}`]}));
+    setState(s=>({...s, active:{oliId:item.id, source:"tmr", phase:"WORK", startedAt:Date.now(), workSeconds:item.workMinutes*60, bufferSeconds:item.bufferMinutes*60, frozen:false, frozenAt:null}, tmrItems:s.tmrItems.map(x=>x.id===item.id?{...x,status:"IN_PROGRESS"}:x), audit:[...s.audit,`${now()} Work Started · ${item.id}`]}));
   };
+
+  const freezeTimer = () => setState(s => s.active && !s.active.frozen ? {...s, active: {...s.active, frozen: true, frozenAt: Date.now()}} : s);
+  const unfreezeTimer = () => setState(s => s.active && s.active.frozen ? {...s, active: {...s.active, frozen: false, startedAt: s.active.startedAt + (Date.now() - s.active.frozenAt), frozenAt: null}} : s);
+
+  const openPause = () => { freezeTimer(); setModal({type:"pause", item: activeItem}); };
+  const openComplete = () => { freezeTimer(); setShowDraft(true); };
+  const cancelPause = () => { unfreezeTimer(); setModal(null); };
+  const cancelDraft = () => { unfreezeTimer(); setShowDraft(false); };
 
   const finish = (draft) => {
     const item = activeItem;
     const bufferUsed = active.phase === "BUFFER";
     const withinTime = !bufferUsed;
-    const totalSec = bufferUsed ? active.workSeconds + Math.floor((Date.now() - active.startedAt)/1000) : Math.floor((Date.now() - active.startedAt)/1000);
+    const capturedElapsed = active.frozen ? Math.max(0, Math.floor((active.frozenAt - active.startedAt)/1000)) : Math.floor((Date.now() - active.startedAt)/1000);
+    const totalSec = bufferUsed ? active.workSeconds + capturedElapsed : capturedElapsed;
     const recovery = !!item.recovery;
     setState(s => ({
       ...s,
@@ -268,12 +278,14 @@ function TrademarkYetToWork({ state, setState }) {
 
   const movePriority = (info, reason) => {
     const item = activeItem;
+    const capturedElapsed = active.frozen ? Math.max(0, Math.floor((active.frozenAt - active.startedAt)/1000)) : Math.floor((Date.now() - active.startedAt)/1000);
+    const totalSec = active.phase === "BUFFER" ? active.workSeconds + capturedElapsed : capturedElapsed;
     setState(s => ({
       ...s,
       active: null,
       tmrItems: s.tmrItems.map(x => x.id === item.id ? {...x, status: "PRIORITY"} : x),
-      priority: [...s.priority, {...item, ...info, reason, createdAt: now(), createdDate: today(), source: "tmr"}],
-      audit: [...s.audit, `${now()} Moved to Priority · ${reason} · ${item.id}`]
+      priority: [...s.priority, {...item, ...info, reason, elapsedSeconds: totalSec, bufferUsed: active.phase === "BUFFER", createdAt: now(), createdDate: today(), source: "tmr"}],
+      audit: [...s.audit, `${now()} Moved to Priority · ${reason} · Elapsed ${fmt(totalSec)} · ${item.id}`]
     }));
     setModal(null);
   };
@@ -301,8 +313,8 @@ function TrademarkYetToWork({ state, setState }) {
         <small className={active.phase === "BUFFER" ? "red-time" : "green-time"}>Elapsed {fmt(totalElapsed)}</small>
       </div>
       <div className="active-actions">
-        <button className="secondary" onClick={()=>setModal({type:"pause", item: activeItem})} data-testid="pause-live-work-button"><Pause size={16}/> PAUSE</button>
-        <button className="primary" onClick={()=>setShowDraft(true)} data-testid="complete-filing-button"><CheckSquare size={16}/> COMPLETE</button>
+        <button className="secondary" onClick={openPause} data-testid="pause-live-work-button"><Pause size={16}/> PAUSE</button>
+        <button className="primary" onClick={openComplete} data-testid="complete-filing-button"><CheckSquare size={16}/> COMPLETE</button>
       </div>
     </section>}
 
@@ -346,71 +358,23 @@ function TrademarkYetToWork({ state, setState }) {
       </div>}
     </section>
 
-    {modal && <DispositionModal kind={modal.type === "expired" ? "incomplete" : "pause"} item={modal.item} onCancel={()=>setModal(null)} onSubmit={info=>movePriority(info, modal.type === "expired" ? "Buffer Expired" : "Paused by Agent")}/>}
-    {showDraft && active && activeItem && <DraftModal item={activeItem} remaining={remaining} tickElapsed={totalElapsed} active={active} onCancel={()=>setShowDraft(false)} onSubmit={finish}/>}
-  </div>;
-}
-
-function LiveWork({ state, setState }) {
-  const nav = useNavigate();
-  const [query, setQuery] = useState(""); const [submittedQuery, setSubmittedQuery] = useState("");
-  const [modal, setModal] = useState(null); const [completeConfirm, setCompleteConfirm] = useState(false);
-  const [draftDetails, setDraftDetails] = useState(draftBlank); const [tick, setTick] = useState(Date.now());
-  const active = state.active && state.active.source !== "tmr" ? state.active : null;
-  useEffect(()=>{ if (!active) return; const t=setInterval(()=>setTick(Date.now()),1000); return()=>clearInterval(t) },[active]);
-  useEffect(()=>{ if (!active) return; const elapsed=Math.floor((Date.now()-active.startedAt)/1000); const remaining=active.phase === "BUFFER" ? active.bufferSeconds-elapsed : active.workSeconds-elapsed; if (remaining <= 0 && active.phase === "WORK") { setState(s=>({...s, active:{...s.active, phase:"BUFFER", startedAt:Date.now()}, audit:[...s.audit,`${now()} Buffer Started · ${active.oliId}`]})); } else if (remaining <= 0 && active.phase === "BUFFER") setModal({ type:"expired", item: state.items.find(x=>x.id===active.oliId) }); },[tick, active, setState, state.items]);
-  const shown = useMemo(()=>{ if (!submittedQuery.trim()) return []; const q = submittedQuery.trim().toLowerCase(); return state.items.filter(x => x.status !== "COMPLETED" && (x.masterId.toLowerCase().includes(q) || x.id.toLowerCase().includes(q))); },[state.items, submittedQuery]);
-  const bannerMaster = shown[0]?.masterId;
-  const submitSearch = () => setSubmittedQuery(query);
-  const begin = (item) => { if (!item.assigned || state.active) return; setState(s=>({...s, active:{oliId:item.id, source:"items", phase:"WORK", startedAt:Date.now(), workSeconds:item.workMinutes*60, bufferSeconds:item.bufferMinutes*60}, items:s.items.map(x=>x.id===item.id?{...x,status:"IN_PROGRESS"}:x), audit:[...s.audit,`${now()} Work Started · ${item.id}`]})); };
-  const isTrademark = active && state.items.find(x=>x.id===active.oliId)?.service === "Trademark Filing";
-  const draftReady = () => Object.values(draftDetails).every(Boolean);
-  const finish = (bufferUsed=false) => {
-    const item=state.items.find(x=>x.id===active.oliId); const recovery=!!item?.recovery;
-    if (isTrademark && !draftReady()) return;
-    const goingToACS = isTrademark;
-    setState(s=>({
-      ...s, active:null,
-      items: s.items.map(x=>x.id===item.id?{...x,status:"COMPLETED",recovery:false,nextStage: goingToACS ? "All Call Schedule" : "Completed", draftDetails: goingToACS ? draftDetails : null}:x),
-      allCallSchedule: goingToACS ? [...s.allCallSchedule, { id: item.id, masterId: item.masterId, service: item.service, draftDetails, completedAt: `${today()} ${now()}`, agent: "Abhik Datta", bufferUsed, callStatus: "Pending" }] : s.allCallSchedule,
-      completed: s.completed+1,
-      normalCompleted: s.normalCompleted+(recovery?0:1),
-      priorityResolved: s.priorityResolved+(recovery?1:0),
-      bufferCompleted: s.bufferCompleted+(bufferUsed?1:0),
-      audit: [...s.audit, `${now()} ${goingToACS ? "TMA Draft Uploaded → All Call Schedule" : "Work Completed"}${bufferUsed?" · Buffer Used":""}${recovery?" · Priority Recovery":""} · ${item.id}`]
-    }));
-    setCompleteConfirm(false); setDraftDetails(draftBlank);
-    if (goingToACS) setTimeout(()=>nav("/employee/all-call-schedule"), 300);
-  };
-  const movePriority = (info, reason) => { const item=state.items.find(x=>x.id===active.oliId); setState(s=>({...s, active:null, items: s.items.map(x=>x.id===item.id?{...x,status:"PRIORITY"}:x), priority:[...s.priority, {...item, ...info, reason, createdAt: now(), createdDate: today(), source:"items"}], audit:[...s.audit, `${now()} Moved to Priority · ${reason} · ${item.id}`]})); setModal(null); };
-  const remaining = active ? (active.phase === "BUFFER" ? active.bufferSeconds - Math.floor((tick-active.startedAt)/1000) : active.workSeconds - Math.floor((tick-active.startedAt)/1000)) : 0;
-  return <div className="page">
-    <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / LIVE WORK</div><h1>Live Work</h1><p>Search your assigned filings and manage work time.</p></div><div className="employee-chip"><UserRound size={17}/> Abhik Datta · Employee</div></div>
-    <Metrics state={state}/>
-    {active && <section className={`active-work ${active.phase === "BUFFER" ? "buffer" : ""}`} data-testid="active-work-card"><div><div className="eyebrow">ACTIVE LIVE WORK</div><h2>{state.items.find(x=>x.id===active.oliId)?.service}</h2><p>{active.oliId}</p></div><div className="timer-block"><span>{active.phase === "BUFFER" ? "BUFFER TIME" : "TIME REMAINING"}</span><strong data-testid="live-work-timer">{fmt(remaining)}</strong></div><div className="active-actions"><button className="secondary" onClick={()=>setModal({type:"pause",item:state.items.find(x=>x.id===active.oliId)})} data-testid="pause-live-work-button"><Pause size={16}/> PAUSE</button><button className="primary" onClick={()=>setCompleteConfirm(true)} data-testid="complete-filing-button"><CheckSquare size={16}/> COMPLETE FILING</button></div></section>}
-    <section className="work-section">
-      <div className="section-head"><div><h2>Find Live Work</h2><p className="muted">Search by Master OLI ID or individual OLI ID to load assigned filings</p></div><div className="search-box"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSearch()} placeholder="Enter Master OLI ID or OLI ID" data-testid="live-work-search-input"/><button className="primary" onClick={submitSearch} data-testid="live-work-search-button">Search</button></div></div>
-      {!submittedQuery.trim() ? <div className="empty search-empty" data-testid="live-work-empty-state"><Search size={30}/><strong>Search to load Live Work</strong><span>Enter a Master OLI ID (e.g. O4560674177LI) or individual OLI ID to see assigned filings.</span></div> : shown.length === 0 ? <div className="empty" data-testid="live-work-no-results"><FileText size={30}/><strong>No filings found</strong><span>No records match “{submittedQuery}”.</span></div> : <><div className="result-banner"><strong data-testid="live-work-result-count">{shown.length} OLI IDs</strong><span>Master ID: {bannerMaster}</span><small>Assigned to you: {shown.filter(x=>x.assigned).length}</small></div><div className="table-wrap"><table><thead><tr><th>OLI ID</th><th>SERVICE</th><th>ASSIGNED</th><th>STATUS</th><th>WORK / BUFFER</th><th>ACTION</th></tr></thead><tbody>{shown.map(item=><tr key={item.id} data-testid={`live-work-row-${item.id}`}><td className="oli-id">{item.id}</td><td>{item.service}</td><td>{item.assigned?<span className="assigned">● Me</span>:<span className="muted">Not Assigned</span>}</td><td><span className={`status ${item.status.toLowerCase()}`}>{item.status.replaceAll("_", " ")}</span></td><td>{item.workMinutes} min / {item.bufferMinutes} min</td><td><button className={item.assigned && !state.active && item.status === "YET_TO_WORK" ? "start-btn" : "disabled-btn"} onClick={()=>begin(item)} disabled={!item.assigned || !!state.active || item.status !== "YET_TO_WORK"} data-testid={`start-${item.id}-button`}><Play size={14}/> START</button></td></tr>)}</tbody></table></div></>}
-    </section>
-    {modal && <DispositionModal kind={modal.type === "expired" ? "incomplete" : "pause"} item={modal.item} onCancel={()=>setModal(null)} onSubmit={info=>movePriority(info, modal.type === "expired" ? "Buffer Expired" : "Paused by Agent")}/>}
-    {completeConfirm && <div className="modal-backdrop"><div className="modal confirm"><div className="eyebrow">{isTrademark ? "TRANSFER TO NEXT STAGE" : "CONFIRM COMPLETION"}</div><h2>{isTrademark ? "TMA Draft Uploaded" : "Complete Filing?"}</h2><p>{isTrademark ? "This filing will move to All Call Schedule for the next stage." : "You are marking this filing as completed."}</p>{isTrademark && <div className="draft-details" data-testid="tma-draft-details"><label>Add Remark<input value={draftDetails.remark} onChange={e=>setDraftDetails({...draftDetails,remark:e.target.value})} placeholder="Type remark" data-testid="draft-remark"/></label><label>Upload Draft *<input type="file" accept=".pdf,.doc,.docx,image/*" onChange={e=>setDraftDetails({...draftDetails,fileName:e.target.files?.[0]?.name || ""})} data-testid="draft-upload"/></label><label>Brand Name *<input value={draftDetails.brandName} onChange={e=>setDraftDetails({...draftDetails,brandName:e.target.value})} placeholder="Enter Brand Name" data-testid="draft-brand-name"/></label><label>Class *<select value={draftDetails.className} onChange={e=>setDraftDetails({...draftDetails,className:e.target.value})} data-testid="draft-class"><option value="">Select Class</option><option>Class 35</option><option>Class 42</option><option>Class 41</option></select></label><label>Type *<select value={draftDetails.type} onChange={e=>setDraftDetails({...draftDetails,type:e.target.value})} data-testid="draft-type"><option value="">Select Type</option><option>Word Mark</option><option>Device Mark</option><option>Combined Mark</option></select></label><div className="draft-grid"><label>Next Followup Date *<input type="date" value={draftDetails.followupDate} onChange={e=>setDraftDetails({...draftDetails,followupDate:e.target.value})} data-testid="draft-followup-date"/></label><label>Next Followup Time *<input type="time" value={draftDetails.followupTime} onChange={e=>setDraftDetails({...draftDetails,followupTime:e.target.value})} data-testid="draft-followup-time"/></label></div><label>Disposition *<select value={draftDetails.disposition} onChange={e=>setDraftDetails({...draftDetails,disposition:e.target.value})} data-testid="draft-disposition"><option value="">Select Disposition</option><option>TMA Draft Uploaded</option><option>Awaiting Client Approval</option><option>Ready for Filing</option></select></label></div>}<div className="confirm-time"><span>{active.phase === "BUFFER" ? "Buffer Remaining" : "Time Remaining"}</span><strong>{fmt(remaining)}</strong><span>Buffer Used</span><strong>{active.phase === "BUFFER" ? "Yes" : "No"}</strong></div><div className="modal-actions"><button className="secondary" onClick={()=>{setCompleteConfirm(false);setDraftDetails(draftBlank)}} data-testid="cancel-completion-button">CANCEL</button><button className="primary" onClick={()=>finish(active.phase === "BUFFER")} data-testid="confirm-completion-button">{isTrademark ? "SUBMIT & TRANSFER" : "CONFIRM COMPLETION"}</button></div></div></div>}
+    {modal && <DispositionModal kind={modal.type === "expired" ? "incomplete" : "pause"} item={modal.item} onCancel={modal.type === "expired" ? undefined : cancelPause} onSubmit={info=>movePriority(info, modal.type === "expired" ? "Buffer Expired" : "Paused by Agent")}/>}
+    {showDraft && active && activeItem && <DraftModal item={activeItem} remaining={remaining} tickElapsed={totalElapsed} active={active} onCancel={cancelDraft} onSubmit={finish}/>}
   </div>;
 }
 
 function Priority({ state, setState }) {
   const nav = useNavigate();
   const transfer = (item) => {
-    const isTmr = item.source === "tmr";
-    const arr = isTmr ? "tmrItems" : "items";
-    setState(s=>({ ...s, priority: s.priority.filter(x=>x.id!==item.id), [arr]: s[arr].map(x=>x.id===item.id?{...x, status:"YET_TO_WORK", recovery:true}:x), audit:[...s.audit, `${now()} Transferred to ${isTmr ? "Trademark Yet to Work" : "Live Work"} · ${item.id}`]}));
-    setTimeout(() => nav(isTmr ? "/employee/trademark-registration/yet-to-work" : "/employee/live-work"), 200);
+    setState(s=>({ ...s, priority: s.priority.filter(x=>x.id!==item.id), tmrItems: s.tmrItems.map(x=>x.id===item.id?{...x, status:"YET_TO_WORK", recovery:true}:x), audit:[...s.audit, `${now()} Transferred to Trademark Yet to Work · ${item.id}`]}));
+    setTimeout(() => nav("/employee/trademark-registration/yet-to-work"), 200);
   };
   return <div className="page">
     <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / PRIORITY</div><h1 data-testid="priority-page-title">Priority Cases</h1><p>Cases requiring recovery or follow-up.</p></div><div className="priority-total"><strong data-testid="priority-page-count">{state.priority.length}</strong><span>open cases</span></div></div>
     <Metrics state={state}/>
     <section className="work-section">
       <div className="section-head"><div><h2>Priority Queue</h2><p className="muted">Paused and buffer-expired work remains visible until transferred.</p></div></div>
-      {state.priority.length===0?<div className="empty"><BriefcaseBusiness size={30}/><strong>No priority cases</strong><span>Cases moved here from Live Work will appear in this queue.</span></div>:<div className="table-wrap"><table><thead><tr><th>PRIORITY #</th><th>OLI ID</th><th>NAME / SERVICE</th><th>REASON</th><th>SUB-DISPOSITION</th><th>REMARK</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>{state.priority.map((x,i)=><tr key={`${x.id}-${i}`} data-testid={`priority-row-${x.id}`}><td><span className="priority-number">#{i+1}</span></td><td className="oli-id">{x.id}</td><td>{x.name || x.service}<br/><small className="muted">{x.service}</small></td><td>{x.reason}</td><td>{x.subDisposition}</td><td className="remark">{x.remark}</td><td>{x.createdDate}<br/><small className="muted">{x.createdAt}</small></td><td><button className="start-btn" onClick={()=>transfer(x)} data-testid={`transfer-${x.id}-button`}><Play size={14}/> TRANSFER TO LIVE WORK</button></td></tr>)}</tbody></table></div>}
+      {state.priority.length===0?<div className="empty"><BriefcaseBusiness size={30}/><strong>No priority cases</strong><span>Cases moved here from Live Work will appear in this queue.</span></div>:<div className="table-wrap"><table><thead><tr><th>PRIORITY #</th><th>OLI ID</th><th>NAME / SERVICE</th><th>REASON</th><th>SUB-DISPOSITION</th><th>REMARK</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>{state.priority.map((x,i)=><tr key={`${x.id}-${i}`} data-testid={`priority-row-${x.id}`}><td><span className="priority-number">#{i+1}</span></td><td className="oli-id">{x.id}</td><td>{x.name || x.service}<br/><small className="muted">{x.service}</small></td><td>{x.reason}</td><td>{x.subDisposition}</td><td className="remark">{x.remark}</td><td>{x.createdDate}<br/><small className="muted">{x.createdAt}</small></td><td><button className="start-btn" onClick={()=>transfer(x)} data-testid={`transfer-${x.id}-button`}><Play size={14}/> TRANSFER TO YET TO WORK</button></td></tr>)}</tbody></table></div>}
     </section>
   </div>;
 }
@@ -452,7 +416,6 @@ function App() {
       <Route path="/employee/priority" element={<Priority state={state} setState={setState}/>}/>
       <Route path="/employee/all-call-schedule" element={<AllCallSchedule state={state}/>}/>
       <Route path="/employee/trademark-registration/yet-to-work" element={<TrademarkYetToWork state={state} setState={setState}/>}/>
-      <Route path="/employee/live-work/*" element={<LiveWork state={state} setState={setState}/>}/>
       <Route path="*" element={<Dashboard state={state}/>}/>
     </Routes>
   </Shell></BrowserRouter>;
