@@ -58,8 +58,8 @@ const buildTmrSeed = () => tmrOliIds.map((id, i) => ({
 const draftBlank = { remark:"", fileName:"", brandName:"", className:"", type:"", followupDate:"", followupTime:"", disposition:"" };
 const initial = { tmrItems: buildTmrSeed(), active: null, priority: [], allCallSchedule: [], completedFilings: [], audit: [], target: 7, completed: 0, normalCompleted: 0, bufferCompleted: 0, priorityResolved: 0 };
 const STORAGE_KEY = "oli-live-work-v5";
-const load = () => { try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (!s || !s.tmrItems) return initial; if (!s.completedFilings) s.completedFilings = []; return s; } catch { return initial; } };
-const save = (state) => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+const load = () => initial;
+coconst save = (state) => {};
 const fmt = (seconds) => `${String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, "0")}:${String(Math.max(0, seconds) % 60).padStart(2, "0")}`;
 const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const today = () => new Date().toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" });
@@ -451,8 +451,21 @@ function Dashboard({ state }) {
 }
 
 function App() {
-  const [state, setState] = useState(load);
-  useEffect(()=>save(state),[state]);
+  const [state, setState] = useState(() => ({
+  ...initial,
+  tmrItems: buildTmrSeed(),
+  active: null,
+  priority: [],
+  allCallSchedule: [],
+  completedFilings: [],
+  audit: [],
+  target: 7,
+  completed: 0,
+  normalCompleted: 0,
+  bufferCompleted: 0,
+  priorityResolved: 0
+}));
+  // Demo mode: changes are intentionally not persisted across reloads.
   return <BrowserRouter><Shell state={state}>
     <Routes>
       <Route path="/employee/priority" element={<Priority state={state} setState={setState}/>}/>
