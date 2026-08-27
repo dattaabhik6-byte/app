@@ -154,7 +154,7 @@ function Metrics({ state }) {
   return <>
     <div className="metrics">
       <div><span>TARGET</span><strong data-testid="target-count">{state.target}</strong></div>
-      <div className={`completed-card ${hasCompleted ? "clickable" : ""}`} onClick={hasCompleted ? () => setShowCompleted(true) : undefined} data-testid="completed-metric-card"><span>COMPLETED</span><strong data-testid="completed-count">{state.normalCompleted}</strong>{hasCompleted && <em className="metric-hint" data-testid="completed-view-hint">View <ChevronDown size={11}/></em>}</div>
+      <div className={`completed-card ${hasCompleted ? "clickable" : ""}`} onClick={hasCompleted ? () => setShowCompleted(true) : undefined} data-testid="completed-metric-card"><span>COMPLETED</span><strong data-testid="completed-count">{state.normalCompleted}</strong>{hasCompleted && <em className="metric-hint" data-testid="completed-view-hint">﹀</em>}</div>
       <div><span>REMAINING</span><strong data-testid="remaining-count">{Math.max(0, state.target - state.normalCompleted)}</strong></div>
       <div><span>PROGRESS</span><strong data-testid="completion-percent">{pct}%</strong></div>
       <div><span>PRIORITY</span><strong data-testid="priority-count">{state.priority.length}</strong></div>
