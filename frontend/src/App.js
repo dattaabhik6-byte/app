@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import { Bell, BriefcaseBusiness, CalendarDays, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Download, FileText, Grid2X2, Headphones, LayoutDashboard, Pause, Phone, Play, Search, UserRound, X } from "lucide-react";
 import "@/App.css";
@@ -56,9 +56,9 @@ const buildTmrSeed = () => tmrOliIds.map((id, i) => ({
 }));
 
 const draftBlank = { remark:"", fileName:"", brandName:"", className:"", type:"", followupDate:"", followupTime:"", disposition:"" };
-const initial = { tmrItems: buildTmrSeed(), active: null, priority: [], allCallSchedule: [], audit: [], target: 7, completed: 0, normalCompleted: 0, bufferCompleted: 0, priorityResolved: 0 };
-const STORAGE_KEY = "oli-live-work-v4";
-const load = () => { try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (!s || !s.tmrItems) return initial; return s; } catch { return initial; } };
+const initial = { tmrItems: buildTmrSeed(), active: null, priority: [], allCallSchedule: [], completedFilings: [], audit: [], target: 7, completed: 0, normalCompleted: 0, bufferCompleted: 0, priorityResolved: 0 };
+const STORAGE_KEY = "oli-live-work-v5";
+const load = () => { try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (!s || !s.tmrItems) return initial; if (!s.completedFilings) s.completedFilings = []; return s; } catch { return initial; } };
 const save = (state) => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const fmt = (seconds) => `${String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, "0")}:${String(Math.max(0, seconds) % 60).padStart(2, "0")}`;
 const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -88,6 +88,7 @@ function Shell({ state, children }) {
     { label: "Fresh Unassign", cyan: true },
     { label: "TMR Premium Fresh", cyan: true },
     { label: "Yet to Work", arrow: true, path: "/employee/trademark-registration/yet-to-work", testid: "tmr-yet-to-work" },
+    { label: "Complete", arrow: true, path: "/employee/trademark-registration/complete", testid: "tmr-complete", badge: state.completedFilings.length },
     { label: "Govt Fee Paid", arrow: true },
     { label: "TMA Draft Approved", arrow: true },
     { label: "TMA Draft Rejected", arrow: true },
@@ -122,6 +123,7 @@ function Shell({ state, children }) {
           {tmrSub.map(item => item.path
             ? <NavLink key={item.label} to={item.path} className={({isActive}) => `tmr-subitem ${isActive ? "selected" : ""}`} data-testid={item.testid}>
                 {item.label}{item.arrow && <span className="arrow"> -&gt;</span>}
+                {item.badge > 0 && <b className="tmr-badge">{item.badge}</b>}
               </NavLink>
             : <div key={item.label} className={`tmr-subitem ${item.cyan ? "cyan" : ""}`}>
                 {item.label}{item.arrow && <span className="arrow"> -&gt;</span>}
@@ -209,11 +211,11 @@ function DraftModal({ item, remaining, tickElapsed, active, onCancel, onSubmit }
 }
 
 function TrademarkYetToWork({ state, setState }) {
-  const nav = useNavigate();
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(null);
   const [showDraft, setShowDraft] = useState(false);
   const [tick, setTick] = useState(Date.now());
+  const [successMsg, setSuccessMsg] = useState(null);
   const active = state.active && state.active.source === "tmr" ? state.active : null;
   useEffect(()=>{ if (!active) return; const t=setInterval(()=>setTick(Date.now()),1000); return()=>clearInterval(t) },[active]);
   useEffect(()=>{
@@ -265,7 +267,8 @@ function TrademarkYetToWork({ state, setState }) {
       ...s,
       active: null,
       tmrItems: s.tmrItems.map(x => x.id === item.id ? {...x, status: "COMPLETED", recovery: false, nextStage: "Call Schedule", draftDetails: draft, completionSeconds: totalSec, withinTime} : x),
-      allCallSchedule: [...s.allCallSchedule, { id: item.id, name: item.name, masterId: item.masterId, service: item.service, state: item.state, amount: item.amount, package: item.package, draftDetails: draft, completedAt: `${today()} ${now()}`, agent: "Abhik Datta", bufferUsed, completionSeconds: totalSec, withinTime, callStatus: "Pending" }],
+      completedFilings: [...s.completedFilings, { id: item.id, name: item.name, masterId: item.masterId, service: item.service, state: item.state, amount: item.amount, package: item.package, draftDetails: draft, completedAt: `${today()} ${now()}`, agent: "Abhik Datta", bufferUsed, completionSeconds: totalSec, withinTime }],
+      allCallSchedule: [...s.allCallSchedule, { id: item.id, name: item.name, masterId: item.masterId, service: item.service, draftDetails: draft, scheduledAt: `${today()} ${now()}`, agent: "Abhik Datta", callStatus: "Pending" }],
       completed: s.completed + 1,
       normalCompleted: s.normalCompleted + (recovery ? 0 : 1),
       priorityResolved: s.priorityResolved + (recovery ? 1 : 0),
@@ -273,7 +276,8 @@ function TrademarkYetToWork({ state, setState }) {
       audit: [...s.audit, `${now()} TMA Draft Uploaded → Call Schedule · Completed in ${fmt(totalSec)}${bufferUsed ? " (Buffer Used)" : ""} · ${item.id}`]
     }));
     setShowDraft(false);
-    setTimeout(() => nav("/employee/all-call-schedule"), 300);
+    setSuccessMsg(`Filing completed in ${fmt(totalSec)}${bufferUsed ? " (buffer used)" : ""} · ${item.id} · Follow-up scheduled for ${draft.followupDate} at ${draft.followupTime}`);
+    setTimeout(() => setSuccessMsg(null), 6000);
   };
 
   const movePriority = (info, reason) => {
@@ -300,7 +304,7 @@ function TrademarkYetToWork({ state, setState }) {
       <div className="employee-chip"><UserRound size={17}/> Abhik Datta · Employee</div>
     </div>
     <Metrics state={state}/>
-
+    {successMsg && <div className="success-banner" data-testid="finish-success-banner">✓ {successMsg}</div>}
     {active && activeItem && <section className={`active-work ${active.phase === "BUFFER" ? "buffer" : ""}`} data-testid="active-work-card">
       <div>
         <div className="eyebrow">ACTIVE LIVE WORK</div>
@@ -381,11 +385,51 @@ function Priority({ state, setState }) {
 
 function AllCallSchedule({ state }) {
   return <div className="page">
-    <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / ALL CALL SCHEDULE</div><h1 data-testid="acs-page-title">All Call Schedule</h1><p>Trademark filings transferred with TMA Draft Uploaded. Follow-ups scheduled below.</p></div><div className="priority-total"><strong data-testid="acs-total-count">{state.allCallSchedule.length}</strong><span>scheduled calls</span></div></div>
+    <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / ALL CALL SCHEDULE</div><h1 data-testid="acs-page-title">All Call Schedule</h1><p>Follow-ups scheduled with the client. Click Call Now to reach out.</p></div><div className="priority-total"><strong data-testid="acs-total-count">{state.allCallSchedule.length}</strong><span>scheduled calls</span></div></div>
     <Metrics state={state}/>
     <section className="work-section">
-      <div className="section-head"><div><h2>Scheduled Calls</h2><p className="muted">All Trademark cases queued for client call and next-stage action.</p></div></div>
-      {state.allCallSchedule.length===0?<div className="empty" data-testid="acs-empty"><CalendarDays size={30}/><strong>No scheduled calls yet</strong><span>Trademark filings completed with TMA Draft Uploaded will appear here.</span></div>:<div className="table-wrap"><table><thead><tr><th>OLI ID</th><th>CUSTOMER</th><th>BRAND NAME</th><th>CLASS</th><th>TYPE</th><th>DRAFT FILE</th><th>CALL DATE</th><th>CALL TIME</th><th>COMPLETION TIME</th><th>CALL STATUS</th><th>ACTION</th></tr></thead><tbody>{state.allCallSchedule.map((x,i)=><tr key={`${x.id}-${i}`} data-testid={`acs-row-${x.id}`}><td className="oli-id">{x.id}</td><td>{x.name || x.masterId}</td><td>{x.draftDetails.brandName}</td><td>{x.draftDetails.className}</td><td>{x.draftDetails.type}</td><td className="draft-file"><FileText size={13}/> {x.draftDetails.fileName}</td><td>{x.draftDetails.followupDate}</td><td>{x.draftDetails.followupTime}</td><td className={x.withinTime ? "green-time" : "red-time"} data-testid={`acs-completion-${x.id}`}><strong>Completed in {fmt(x.completionSeconds || 0)}</strong>{x.bufferUsed && <div><small>(Buffer Used)</small></div>}</td><td><span className="status in_progress">{x.callStatus || "Pending"}</span></td><td><button className="secondary" data-testid={`acs-call-${x.id}-button`}><Phone size={13}/> Call Now</button></td></tr>)}</tbody></table></div>}
+      <div className="section-head"><div><h2>Scheduled Calls</h2><p className="muted">Only the scheduled call information is shown here. Completion time and metrics live under Trademark Registration → Complete.</p></div></div>
+      {state.allCallSchedule.length===0?<div className="empty" data-testid="acs-empty"><CalendarDays size={30}/><strong>No scheduled calls yet</strong><span>Trademark filings completed with TMA Draft Uploaded will appear here.</span></div>:<div className="table-wrap"><table><thead><tr><th>OLI ID</th><th>CUSTOMER</th><th>CALL DATE</th><th>CALL TIME</th><th>CALL STATUS</th><th>ACTION</th></tr></thead><tbody>{state.allCallSchedule.map((x,i)=><tr key={`${x.id}-${i}`} data-testid={`acs-row-${x.id}`}><td className="oli-id">{x.id}</td><td>{x.name || x.masterId}</td><td data-testid={`acs-call-date-${x.id}`}>{x.draftDetails.followupDate}</td><td data-testid={`acs-call-time-${x.id}`}>{x.draftDetails.followupTime}</td><td><span className="status in_progress">{x.callStatus || "Pending"}</span></td><td><button className="secondary" data-testid={`acs-call-${x.id}-button`}><Phone size={13}/> Call Now</button></td></tr>)}</tbody></table></div>}
+    </section>
+  </div>;
+}
+
+function CompletedFilings({ state }) {
+  const [openId, setOpenId] = useState(null);
+  const rows = state.completedFilings;
+  return <div className="page">
+    <div className="page-title"><div><div className="breadcrumb">EMPLOYEE PANEL / TRADEMARK REGISTRATION / COMPLETE</div><h1 data-testid="complete-page-title">Completed Filings</h1><p>Every filing you finished, with the exact time you took to complete it.</p></div><div className="priority-total"><strong data-testid="complete-page-count">{rows.length}</strong><span>completed</span></div></div>
+    <Metrics state={state}/>
+    <section className="work-section">
+      <div className="section-head"><div><h2>Complete</h2><p className="muted">Click any row to expand and see the full filing detail and time taken.</p></div></div>
+      {rows.length === 0 ? <div className="empty" data-testid="complete-empty"><CheckSquare size={30}/><strong>No completed filings yet</strong><span>Cases you complete in Yet to Work will appear here with the time you took.</span></div> : <div className="table-wrap"><table><thead><tr><th>OLI ID</th><th>CUSTOMER</th><th>BRAND NAME</th><th>CLASS</th><th>TYPE</th><th>COMPLETED AT</th><th>TIME TAKEN</th><th>ACTION</th></tr></thead><tbody>{rows.map((x, i) => <Fragment key={`${x.id}-${i}`}>
+        <tr data-testid={`complete-row-${x.id}`} onClick={() => setOpenId(openId === x.id ? null : x.id)} className="clickable-row">
+          <td className="oli-id">{x.id}</td>
+          <td>{x.name}</td>
+          <td>{x.draftDetails.brandName}</td>
+          <td>{x.draftDetails.className}</td>
+          <td>{x.draftDetails.type}</td>
+          <td>{x.completedAt}</td>
+          <td className={x.withinTime ? "green-time" : "red-time"} data-testid={`complete-time-${x.id}`}><strong>{fmt(x.completionSeconds || 0)}</strong>{x.bufferUsed && <div><small>(Buffer Used)</small></div>}</td>
+          <td><button className="secondary" data-testid={`complete-toggle-${x.id}`}>{openId === x.id ? "Hide" : "View"} Details</button></td>
+        </tr>
+        {openId === x.id && <tr className="detail-row" data-testid={`complete-detail-${x.id}`}>
+          <td colSpan="8">
+            <div className="detail-grid">
+              <div><span>Master ID</span><strong>{x.masterId}</strong></div>
+              <div><span>State</span><strong>{x.state}</strong></div>
+              <div><span>Amount</span><strong>₹{x.amount}</strong></div>
+              <div><span>Package</span><strong>{x.package}</strong></div>
+              <div><span>Draft File</span><strong>{x.draftDetails.fileName}</strong></div>
+              <div><span>Remark</span><strong>{x.draftDetails.remark}</strong></div>
+              <div><span>Followup Scheduled</span><strong>{x.draftDetails.followupDate} · {x.draftDetails.followupTime}</strong></div>
+              <div><span>Disposition</span><strong>{x.draftDetails.disposition}</strong></div>
+              <div><span>Completed by</span><strong>{x.agent}</strong></div>
+              <div><span>Buffer Used</span><strong className={x.bufferUsed ? "red-time" : "green-time"}>{x.bufferUsed ? "Yes" : "No"}</strong></div>
+            </div>
+          </td>
+        </tr>}
+      </Fragment>)}</tbody></table></div>}
     </section>
   </div>;
 }
@@ -416,6 +460,7 @@ function App() {
       <Route path="/employee/priority" element={<Priority state={state} setState={setState}/>}/>
       <Route path="/employee/all-call-schedule" element={<AllCallSchedule state={state}/>}/>
       <Route path="/employee/trademark-registration/yet-to-work" element={<TrademarkYetToWork state={state} setState={setState}/>}/>
+      <Route path="/employee/trademark-registration/complete" element={<CompletedFilings state={state}/>}/>
       <Route path="*" element={<Dashboard state={state}/>}/>
     </Routes>
   </Shell></BrowserRouter>;

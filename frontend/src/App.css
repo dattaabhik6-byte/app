@@ -25,6 +25,16 @@
 .timer-block small{display:block;font-size:11px;font-weight:700;margin-top:6px;letter-spacing:.05em}
 .confirm .modal-close{position:absolute;right:15px;top:15px;background:none;color:#758090;border:0}
 .primary:disabled{background:#a5d9c0;cursor:not-allowed}
+.success-banner{background:linear-gradient(90deg,#e5faee,#d4f5e0);border:1px solid #6dd4a0;color:#0a6d43;padding:14px 20px;margin-bottom:20px;font-size:14px;font-weight:700;border-left:5px solid #0cbd70;animation:slideIn .35s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.tmr-badge{margin-left:auto;background:#0cbd70;border-radius:11px;min-width:20px;height:20px;text-align:center;padding:1px 7px;color:#fff;font-size:11px;line-height:18px;font-weight:800}
+.clickable-row{cursor:pointer;transition:background .15s}
+.clickable-row:hover{background:#f7f9ff}
+.detail-row td{background:#f7f9ff;padding:20px 24px;border-top:0}
+.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 30px}
+.detail-grid>div{display:flex;flex-direction:column;gap:3px}
+.detail-grid span{font-size:11px;font-weight:800;color:#7d8491;letter-spacing:.06em;text-transform:uppercase}
+.detail-grid strong{color:#2f3542;font-size:14px;font-weight:700}
 
 @media(max-width:950px){.sidebar{width:225px;padding:15px}.topbar{padding:0 16px}.top-icons{display:none}.page{padding:24px 16px}.metrics{grid-template-columns:repeat(3,1fr)}.active-work{grid-template-columns:1fr 1fr}.active-actions{grid-column:1/-1;justify-content:flex-start}.search-box{min-width:280px}.section-head{align-items:flex-start;flex-direction:column}.dashboard-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.sidebar{width:64px;padding:15px 8px}.brand strong,.brand sup,.brand small,.side-search,.side-link span,.badge{display:none}.brand{justify-content:center}.side-link{justify-content:center;padding:12px 0}.topbar{height:64px}.global-search{width:100%}.global-search select{max-width:115px}.page-title{display:block}.employee-chip,.priority-total{margin-top:15px;width:max-content}.metrics{grid-template-columns:repeat(2,1fr)}.active-work{grid-template-columns:1fr}.timer-block{border:0;text-align:left;padding:10px 0}.search-box{min-width:100%;width:100%}.result-banner{flex-wrap:wrap}.result-banner small{margin-left:0}}
